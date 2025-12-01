@@ -28,7 +28,8 @@
     "check": "prettier --check . && tsc",
     "lint-fix": "prettier --check . --write",
     "test:unit": "vitest run",
-    "test:unit:watch": "vitest"
+    "test:unit:watch": "vitest",
+    "prepare": "npm run build"
   },
   "dependencies": {
     "express": "^4.21.2",
