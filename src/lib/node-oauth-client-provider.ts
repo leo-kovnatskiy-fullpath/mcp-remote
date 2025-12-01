@@ -104,7 +104,10 @@ export class NodeOAuthClientProvider implements OAuthClientProvider {
     }
 
     // Check environment variables (useful for CI/CD environments)
-    const envClientInfo = await readFromEnvVar<OAuthClientInformationFull>('MCP_REMOTE_CLIENT_INFO', OAuthClientInformationFullSchema)
+    // Try MCP_REMOTE_CLIENT_INFO first, then fall back to COPILOT_MCP_* prefixed vars
+    const envClientInfo =
+      (await readFromEnvVar<OAuthClientInformationFull>('MCP_REMOTE_CLIENT_INFO', OAuthClientInformationFullSchema)) ||
+      (await readFromEnvVar<OAuthClientInformationFull>('COPILOT_MCP_JIRA_CLIENT_INFO', OAuthClientInformationFullSchema))
     if (envClientInfo) {
       debugLog('Using client info from environment variable')
       this._clientInfoFromEnv = true
@@ -141,7 +144,10 @@ export class NodeOAuthClientProvider implements OAuthClientProvider {
     debugLog('Token request stack trace:', new Error().stack)
 
     // Check environment variables first (useful for CI/CD environments)
-    const envTokens = await readFromEnvVar<OAuthTokens>('MCP_REMOTE_TOKENS', OAuthTokensSchema)
+    // Try MCP_REMOTE_TOKENS first, then fall back to COPILOT_MCP_* prefixed vars
+    const envTokens =
+      (await readFromEnvVar<OAuthTokens>('MCP_REMOTE_TOKENS', OAuthTokensSchema)) ||
+      (await readFromEnvVar<OAuthTokens>('COPILOT_MCP_JIRA_TOKENS', OAuthTokensSchema))
     if (envTokens) {
       debugLog('Using tokens from environment variable')
       this._tokensFromEnv = true
