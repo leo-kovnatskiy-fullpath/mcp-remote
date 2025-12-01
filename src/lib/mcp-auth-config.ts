@@ -213,10 +213,7 @@ export async function writeTextFile(serverUrlHash: string, filename: string, tex
  * @param schema The schema to validate against (must have parseAsync method)
  * @returns The parsed and validated data, or undefined if not found or invalid
  */
-export async function readFromEnvVar<T>(
-  envVarName: string,
-  schema: { parseAsync: (data: unknown) => Promise<T> },
-): Promise<T | undefined> {
+export async function readFromEnvVar<T>(envVarName: string, schema: { parseAsync: (data: unknown) => Promise<T> }): Promise<T | undefined> {
   // Check base64 variant first
   const base64EnvVar = `${envVarName}_BASE64`
   const base64Value = process.env[base64EnvVar]
@@ -248,4 +245,3 @@ export async function readFromEnvVar<T>(
 
   return undefined
 }
-

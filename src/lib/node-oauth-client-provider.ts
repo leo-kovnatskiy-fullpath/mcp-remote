@@ -29,6 +29,10 @@ export class NodeOAuthClientProvider implements OAuthClientProvider {
   private authorizeResource: string | undefined
   private _state: string
 
+  // Track if credentials came from environment variables (non-interactive mode)
+  private _tokensFromEnv: boolean = false
+  private _clientInfoFromEnv: boolean = false
+
   /**
    * Creates a new NodeOAuthClientProvider
    * @param options Configuration options for the provider
@@ -69,6 +73,22 @@ export class NodeOAuthClientProvider implements OAuthClientProvider {
   }
 
   /**
+   * Returns true if tokens were loaded from environment variables.
+   * This indicates non-interactive mode where browser auth should be skipped.
+   */
+  get tokensFromEnv(): boolean {
+    return this._tokensFromEnv
+  }
+
+  /**
+   * Returns true if client info was loaded from environment variables.
+   * This indicates non-interactive mode where browser auth should be skipped.
+   */
+  get clientInfoFromEnv(): boolean {
+    return this._clientInfoFromEnv
+  }
+
+  /**
    * Gets the client information if it exists.
    * Priority: static client info (CLI flag) > environment variables > file-based storage.
    * Environment variables: MCP_REMOTE_CLIENT_INFO_BASE64, MCP_REMOTE_CLIENT_INFO
@@ -84,12 +104,10 @@ export class NodeOAuthClientProvider implements OAuthClientProvider {
     }
 
     // Check environment variables (useful for CI/CD environments)
-    const envClientInfo = await readFromEnvVar<OAuthClientInformationFull>(
-      'MCP_REMOTE_CLIENT_INFO',
-      OAuthClientInformationFullSchema,
-    )
+    const envClientInfo = await readFromEnvVar<OAuthClientInformationFull>('MCP_REMOTE_CLIENT_INFO', OAuthClientInformationFullSchema)
     if (envClientInfo) {
       debugLog('Using client info from environment variable')
+      this._clientInfoFromEnv = true
       return envClientInfo
     }
 
@@ -126,6 +144,7 @@ export class NodeOAuthClientProvider implements OAuthClientProvider {
     const envTokens = await readFromEnvVar<OAuthTokens>('MCP_REMOTE_TOKENS', OAuthTokensSchema)
     if (envTokens) {
       debugLog('Using tokens from environment variable')
+      this._tokensFromEnv = true
       return envTokens
     }
 
@@ -186,12 +205,29 @@ export class NodeOAuthClientProvider implements OAuthClientProvider {
   }
 
   /**
-   * Redirects the user to the authorization URL
+   * Redirects the user to the authorization URL.
+   * If tokens were provided via environment variables (non-interactive mode),
+   * this will throw an error instead of opening a browser.
    * @param authorizationUrl The URL to redirect to
    */
   async redirectToAuthorization(authorizationUrl: URL): Promise<void> {
     if (this.authorizeResource) {
       authorizationUrl.searchParams.set('resource', this.authorizeResource)
+    }
+
+    // In non-interactive mode (tokens from env vars), we cannot open a browser
+    if (this._tokensFromEnv || this._clientInfoFromEnv) {
+      const errorMessage =
+        'OAuth tokens provided via environment variables are expired or invalid, ' +
+        'and token refresh failed. Browser-based authentication is not available in non-interactive mode. ' +
+        'Please refresh your tokens locally and update the environment variables.'
+      log(`\n❌ ${errorMessage}\n`)
+      debugLog('Cannot redirect to authorization in non-interactive mode', {
+        tokensFromEnv: this._tokensFromEnv,
+        clientInfoFromEnv: this._clientInfoFromEnv,
+        authorizationUrl: authorizationUrl.toString(),
+      })
+      throw new Error(errorMessage)
     }
 
     log(`\nPlease authorize this client by visiting:\n${authorizationUrl.toString()}\n`)
