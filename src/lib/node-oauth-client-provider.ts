@@ -7,7 +7,7 @@ import {
   OAuthTokensSchema,
 } from '@modelcontextprotocol/sdk/shared/auth.js'
 import type { OAuthProviderOptions, StaticOAuthClientMetadata } from './types'
-import { readJsonFile, writeJsonFile, readTextFile, writeTextFile, deleteConfigFile } from './mcp-auth-config'
+import { readJsonFile, writeJsonFile, readTextFile, writeTextFile, deleteConfigFile, readFromEnvVar } from './mcp-auth-config'
 import { StaticOAuthClientInformationFull } from './types'
 import { log, debugLog, MCP_REMOTE_VERSION } from './utils'
 import { sanitizeUrl } from 'strict-url-sanitise'
@@ -69,15 +69,31 @@ export class NodeOAuthClientProvider implements OAuthClientProvider {
   }
 
   /**
-   * Gets the client information if it exists
+   * Gets the client information if it exists.
+   * Priority: static client info (CLI flag) > environment variables > file-based storage.
+   * Environment variables: MCP_REMOTE_CLIENT_INFO_BASE64, MCP_REMOTE_CLIENT_INFO
    * @returns The client information or undefined
    */
   async clientInformation(): Promise<OAuthClientInformationFull | undefined> {
     debugLog('Reading client info')
+
+    // Check static client info first (from CLI flag)
     if (this.staticOAuthClientInfo) {
       debugLog('Returning static client info')
       return this.staticOAuthClientInfo
     }
+
+    // Check environment variables (useful for CI/CD environments)
+    const envClientInfo = await readFromEnvVar<OAuthClientInformationFull>(
+      'MCP_REMOTE_CLIENT_INFO',
+      OAuthClientInformationFullSchema,
+    )
+    if (envClientInfo) {
+      debugLog('Using client info from environment variable')
+      return envClientInfo
+    }
+
+    // Fall back to file-based storage
     const clientInfo = await readJsonFile<OAuthClientInformationFull>(
       this.serverUrlHash,
       'client_info.json',
@@ -97,13 +113,23 @@ export class NodeOAuthClientProvider implements OAuthClientProvider {
   }
 
   /**
-   * Gets the OAuth tokens if they exist
+   * Gets the OAuth tokens if they exist.
+   * Checks environment variables first (MCP_REMOTE_TOKENS_BASE64, MCP_REMOTE_TOKENS),
+   * then falls back to file-based storage.
    * @returns The OAuth tokens or undefined
    */
   async tokens(): Promise<OAuthTokens | undefined> {
     debugLog('Reading OAuth tokens')
     debugLog('Token request stack trace:', new Error().stack)
 
+    // Check environment variables first (useful for CI/CD environments)
+    const envTokens = await readFromEnvVar<OAuthTokens>('MCP_REMOTE_TOKENS', OAuthTokensSchema)
+    if (envTokens) {
+      debugLog('Using tokens from environment variable')
+      return envTokens
+    }
+
+    // Fall back to file-based storage
     const tokens = await readJsonFile<OAuthTokens>(this.serverUrlHash, 'tokens.json', OAuthTokensSchema)
 
     if (tokens) {

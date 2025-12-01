@@ -1,7 +1,7 @@
 import path from 'path'
 import os from 'os'
 import fs from 'fs/promises'
-import { log, MCP_REMOTE_VERSION } from './utils'
+import { log, debugLog, MCP_REMOTE_VERSION } from './utils'
 
 /**
  * MCP Remote Authentication Configuration
@@ -204,3 +204,48 @@ export async function writeTextFile(serverUrlHash: string, filename: string, tex
     throw error
   }
 }
+
+/**
+ * Reads and parses JSON from an environment variable, with optional base64 decoding.
+ * Checks base64 variant first (envVarName + '_BASE64'), then plain JSON variant.
+ *
+ * @param envVarName The base name of the environment variable (e.g., 'MCP_REMOTE_TOKENS')
+ * @param schema The schema to validate against (must have parseAsync method)
+ * @returns The parsed and validated data, or undefined if not found or invalid
+ */
+export async function readFromEnvVar<T>(
+  envVarName: string,
+  schema: { parseAsync: (data: unknown) => Promise<T> },
+): Promise<T | undefined> {
+  // Check base64 variant first
+  const base64EnvVar = `${envVarName}_BASE64`
+  const base64Value = process.env[base64EnvVar]
+  if (base64Value) {
+    try {
+      const decoded = Buffer.from(base64Value, 'base64').toString('utf-8')
+      const parsed = JSON.parse(decoded)
+      const result = await schema.parseAsync(parsed)
+      debugLog(`Successfully read ${envVarName} from ${base64EnvVar} (base64)`)
+      return result
+    } catch (error) {
+      debugLog(`Failed to parse ${base64EnvVar}:`, error)
+      // Fall through to try plain JSON variant
+    }
+  }
+
+  // Check plain JSON variant
+  const jsonValue = process.env[envVarName]
+  if (jsonValue) {
+    try {
+      const parsed = JSON.parse(jsonValue)
+      const result = await schema.parseAsync(parsed)
+      debugLog(`Successfully read ${envVarName} from environment variable`)
+      return result
+    } catch (error) {
+      debugLog(`Failed to parse ${envVarName}:`, error)
+    }
+  }
+
+  return undefined
+}
+
